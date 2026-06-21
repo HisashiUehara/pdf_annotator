@@ -1,0 +1,11 @@
+# Pinned to 1.38.0: later Streamlit removed streamlit.elements.image.image_to_url,
+# which streamlit-drawable-canvas still imports (AttributeError otherwise).
+streamlit==1.38.0
+streamlit-drawable-canvas>=0.9.3
+pdfplumber>=0.11.0
+pypdfium2>=4.30.0
+reportlab>=4.0.0
+pypdf>=4.0.0
+anthropic>=0.42.0
+# Streamlit 1.38 requires Pillow<11; keep below that ceiling.
+Pillow>=10.0.0,<11
