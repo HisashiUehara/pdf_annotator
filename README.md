@@ -49,7 +49,7 @@ export $(grep -v '^#' .env | xargs)
 streamlit run app.py
 ```
 
-ブラウザで `http://localhost:8501` が開く。
+ブラウザで `http://localhost:8501` を開く。
 
 ## 使い方
 
