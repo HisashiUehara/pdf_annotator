@@ -1,8 +1,30 @@
 from dataclasses import dataclass
 from io import BytesIO
+from typing import Tuple
 
 import pypdfium2 as pdfium
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
+
+# Bold fonts to try for the on-screen overlay; falls back to Pillow's built-in.
+_FONT_CANDIDATES = [
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/Library/Fonts/Arial Bold.ttf",
+    "DejaVuSans-Bold.ttf",
+]
+
+
+def _load_font(size: int):
+    size = max(int(size), 6)
+    for path in _FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default(size=size)  # Pillow >= 10.1, scalable
+    except TypeError:
+        return ImageFont.load_default()
 
 
 @dataclass
@@ -37,3 +59,40 @@ def render_page_image(
         page_width=float(page_width),
         page_height=float(page_height),
     )
+
+
+def overlay_text_on_image(
+    image: Image.Image,
+    pixel_rect: Tuple[float, float, float, float],
+    text: str,
+    color: Tuple[int, int, int] = (255, 0, 0),
+) -> Image.Image:
+    """Return a copy of `image` with `text` drawn (red) inside `pixel_rect`.
+
+    `pixel_rect` is (x0, top, x1, bottom) in IMAGE pixel coordinates (top-origin),
+    i.e. PDF points multiplied by PageImage.scale. The font is sized to fit the
+    rectangle width, mirroring the burned-in PDF overlay.
+    """
+    if not text:
+        return image
+
+    img = image.copy()
+    draw = ImageDraw.Draw(img)
+
+    x0, top, x1, bottom = pixel_rect
+    rect_w = max(x1 - x0, 1.0)
+    rect_h = max(bottom - top, 1.0)
+
+    size = max(rect_h * 0.8, 6.0)
+    font = _load_font(size)
+    text_w = draw.textlength(text, font=font)
+    if text_w > rect_w and text_w > 0:
+        size = max(size * rect_w / text_w, 6.0)
+        font = _load_font(size)
+
+    # Vertically center the glyphs within the rectangle.
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_h = bbox[3] - bbox[1]
+    y = top + (rect_h - text_h) / 2 - bbox[1]
+    draw.text((x0, y), text, fill=color, font=font)
+    return img

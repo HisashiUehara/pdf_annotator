@@ -1,4 +1,3 @@
-import base64
 import os
 
 import streamlit as st
@@ -6,7 +5,7 @@ from streamlit_drawable_canvas import st_canvas
 
 from annotator.claude_client import translate_text
 from annotator.extract import collect_text_in_rect, extract_japanese_spans
-from annotator.imaging import render_page_image
+from annotator.imaging import overlay_text_on_image, render_page_image
 from annotator.render import render_text_in_rect
 
 st.set_page_config(page_title="PDF Annotator", layout="wide")
@@ -19,9 +18,12 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
     st.warning("ANTHROPIC_API_KEY が未設定です。環境変数に設定してから起動してください。")
 
 
+WORK_KEYS = ("source_text", "translation", "place_rect", "preview_image", "burn_key", "burn_pdf")
+
+
 def _reset_state(pdf_bytes: bytes, file_sig: int) -> None:
     """Reset session state for a freshly uploaded file."""
-    for k in ("source_text", "translation", "output_pdf", "page_img", "spans"):
+    for k in WORK_KEYS + ("page_img", "spans"):
         st.session_state.pop(k, None)
     st.session_state["file_sig"] = file_sig
     st.session_state["pdf_bytes"] = pdf_bytes
@@ -108,15 +110,19 @@ if uploaded is not None:
 
     # ----- Stage 2: place the translation -----
     else:
+        translation = st.session_state.get("translation", "")
         st.subheader("ステップ2: 英訳を置く場所を矩形で囲む")
         st.write(f"**抽出した日本語**: {st.session_state.get('source_text', '')}")
-        st.markdown(f"**英訳**: :red[{st.session_state.get('translation', '')}]")
+        st.markdown(f"**英訳**: :red[{translation}]")
 
+        # The canvas background shows the live overlay (the translation drawn at the
+        # chosen rect) once placed; otherwise the plain page image.
+        bg_image = st.session_state.get("preview_image", page_img.image)
         canvas_result = st_canvas(
             fill_color="rgba(255, 0, 0, 0.12)",
             stroke_width=2,
             stroke_color="#ff0000",
-            background_image=page_img.image,
+            background_image=bg_image,
             update_streamlit=True,
             height=img_h,
             width=img_w,
@@ -126,37 +132,40 @@ if uploaded is not None:
 
         cols = st.columns([0.5, 0.5])
         with cols[0]:
-            if st.button("この位置にPDFを生成", type="primary"):
+            if st.button("この位置に英訳を表示", type="primary"):
                 rect = _last_rect_pdf(canvas_result, scale)
                 if rect is None:
                     st.warning("矩形を描いてください。")
                 else:
-                    with st.spinner("PDFを生成中..."):
-                        st.session_state["output_pdf"] = render_text_in_rect(
-                            st.session_state["pdf_bytes"],
-                            PAGE_INDEX,
-                            rect,
-                            st.session_state["translation"],
-                        )
+                    # On-screen overlay only (PIL) — no PDF burn-in here.
+                    px_rect = tuple(v * scale for v in rect)
+                    st.session_state["place_rect"] = rect
+                    st.session_state["preview_image"] = overlay_text_on_image(
+                        page_img.image, px_rect, translation
+                    )
+                    st.rerun()
         with cols[1]:
             if st.button("やり直す（ステップ1へ）"):
-                for k in ("source_text", "translation", "output_pdf"):
+                for k in WORK_KEYS:
                     st.session_state.pop(k, None)
                 st.session_state["stage"] = "extract"
                 st.rerun()
 
-        output_pdf = st.session_state.get("output_pdf")
-        if output_pdf:
-            st.subheader("プレビュー")
-            b64 = base64.b64encode(output_pdf).decode()
-            st.markdown(
-                f'<iframe src="data:application/pdf;base64,{b64}" '
-                f'width="100%" height="700" style="border:1px solid #ddd;"></iframe>',
-                unsafe_allow_html=True,
-            )
+        # Burn into a real PDF only to provide the download (reportlab is NOT used
+        # for the on-screen overlay above). Cached per placement so it runs once.
+        place_rect = st.session_state.get("place_rect")
+        if place_rect:
+            st.caption("配置した英訳は上の画像に重ねて表示しています。確定したらダウンロードしてください。")
+            burn_key = (place_rect, translation)
+            if st.session_state.get("burn_key") != burn_key:
+                with st.spinner("PDFを生成中..."):
+                    st.session_state["burn_pdf"] = render_text_in_rect(
+                        st.session_state["pdf_bytes"], PAGE_INDEX, place_rect, translation
+                    )
+                st.session_state["burn_key"] = burn_key
             st.download_button(
-                "ダウンロード",
-                data=output_pdf,
+                "ダウンロード（PDF）",
+                data=st.session_state["burn_pdf"],
                 file_name="annotated.pdf",
                 mime="application/pdf",
             )
