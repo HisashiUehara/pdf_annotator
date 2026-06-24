@@ -9,6 +9,8 @@ import anthropic
 from .extract import TextSpan
 
 MODEL = "claude-opus-4-8"
+# Short PDF-fragment translations don't need Opus + thinking; Haiku is near-instant.
+TRANSLATE_MODEL = "claude-haiku-4-5-20251001"
 
 
 @dataclass
@@ -143,9 +145,8 @@ def translate_text(text: str, instruction: str = "Translate to natural English."
     )
 
     response = client.messages.create(
-        model=MODEL,
-        max_tokens=2000,
-        thinking={"type": "adaptive"},
+        model=TRANSLATE_MODEL,
+        max_tokens=1024,
         system=system,
         messages=[{"role": "user", "content": user_message}],
     )

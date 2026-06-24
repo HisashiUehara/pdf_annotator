@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from io import BytesIO
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import pdfplumber
 
@@ -34,11 +34,22 @@ class TextSpan:
     page_height: float
 
 
-def extract_japanese_spans(pdf_bytes: bytes) -> List[TextSpan]:
+def extract_japanese_spans(
+    pdf_bytes: bytes, page_index: Optional[int] = None
+) -> List[TextSpan]:
+    """Extract Japanese word spans from the PDF.
+
+    If `page_index` is given, only that page is processed (much faster on
+    multi-page PDFs); otherwise every page is scanned.
+    """
     spans: List[TextSpan] = []
     next_id = 0
     with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
-        for page_idx, page in enumerate(pdf.pages):
+        if page_index is None:
+            pages = list(enumerate(pdf.pages))
+        else:
+            pages = [(page_index, pdf.pages[page_index])]
+        for page_idx, page in pages:
             try:
                 words = page.extract_words()
             except Exception:

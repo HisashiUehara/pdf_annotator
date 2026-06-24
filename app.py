@@ -51,13 +51,12 @@ if uploaded is not None:
     if st.session_state.get("file_sig") != file_sig:
         _reset_state(pdf_bytes, file_sig)
 
-    # Rasterize the page and extract words once per file (cached in session_state).
+    # Rasterize the page once per file (cached in session_state). Text extraction is
+    # deferred until the user asks to translate (see "選択範囲を英訳" below).
     if "page_img" not in st.session_state:
         st.session_state["page_img"] = render_page_image(pdf_bytes, PAGE_INDEX, DISPLAY_WIDTH)
-        st.session_state["spans"] = extract_japanese_spans(pdf_bytes)
 
     page_img = st.session_state["page_img"]
-    spans = st.session_state["spans"]
     scale = page_img.scale
     img_w, img_h = page_img.image.size
     stage = st.session_state.get("stage", "extract")
@@ -84,6 +83,13 @@ if uploaded is not None:
             if rect is None:
                 st.warning("矩形を描いてください。")
             else:
+                # Extract words lazily (page 1 only), cached for later reruns.
+                if "spans" not in st.session_state:
+                    with st.spinner("テキストを抽出中..."):
+                        st.session_state["spans"] = extract_japanese_spans(
+                            pdf_bytes, PAGE_INDEX
+                        )
+                spans = st.session_state["spans"]
                 source_text = collect_text_in_rect(spans, PAGE_INDEX, rect)
                 if not source_text:
                     st.warning("矩形内に日本語が見つかりませんでした。")
