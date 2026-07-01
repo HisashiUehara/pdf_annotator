@@ -96,3 +96,15 @@ def overlay_text_on_image(
     y = top + (rect_h - text_h) / 2 - bbox[1]
     draw.text((x0, y), text, fill=color, font=font)
     return img
+
+
+def overlay_texts_on_image(
+    image: Image.Image,
+    items,
+    color: Tuple[int, int, int] = (255, 0, 0),
+) -> Image.Image:
+    """Draw several (pixel_rect, text) overlays onto a copy of `image`."""
+    img = image
+    for pixel_rect, text in items:
+        img = overlay_text_on_image(img, pixel_rect, text, color)
+    return img

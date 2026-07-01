@@ -2,6 +2,8 @@
 # which streamlit-drawable-canvas still imports (AttributeError otherwise).
 streamlit==1.38.0
 streamlit-drawable-canvas>=0.9.3
+# app_v2.py: draw multiple rectangles directly on the page image (stable background).
+streamlit-image-annotation==0.8.0
 pdfplumber>=0.11.0
 pypdfium2>=4.30.0
 reportlab>=4.0.0

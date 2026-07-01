@@ -66,24 +66,18 @@ def _fit_font_size(
     return max(size, 4.0)
 
 
-def render_text_in_rect(
+def render_texts_in_rects(
     original_pdf_bytes: bytes,
     page_index: int,
-    rect: Tuple[float, float, float, float],
-    text: str,
+    items: List[Tuple[Tuple[float, float, float, float], str]],
     font: str = "Helvetica-Bold",
 ) -> bytes:
-    """Draw `text` (red) inside `rect` on the given page.
+    """Draw several texts (red), each inside its own rect, on the given page.
 
-    `rect` is (x0, top, x1, bottom) in PDF points using pdfplumber's TOP-origin
-    convention (y measured from the top of the page).
+    `items` is a list of (rect, text) where rect is (x0, top, x1, bottom) in PDF
+    points using pdfplumber's TOP-origin convention (y measured from the top).
     """
     reader = PdfReader(BytesIO(original_pdf_bytes))
-
-    x0, top, x1, bottom = rect
-    rect_width = max(x1 - x0, 1.0)
-    rect_height = max(bottom - top, 1.0)
-    font_size = _fit_font_size(text, rect_width, rect_height, font)
 
     overlay_buf = BytesIO()
     c = canvas.Canvas(overlay_buf)
@@ -94,11 +88,18 @@ def render_text_in_rect(
         c.setPageSize((page_w, page_h))
 
         if idx == page_index:
-            # Convert top-origin rect to bottom-origin baseline, vertically centered.
-            y_pdf = page_h - bottom + (rect_height - font_size) / 2
-            c.setFillColor(red)
-            c.setFont(font, font_size)
-            c.drawString(x0, y_pdf, text)
+            for rect, text in items:
+                if not text:
+                    continue
+                x0, top, x1, bottom = rect
+                rect_width = max(x1 - x0, 1.0)
+                rect_height = max(bottom - top, 1.0)
+                font_size = _fit_font_size(text, rect_width, rect_height, font)
+                # Convert top-origin rect to bottom-origin baseline, vertically centered.
+                y_pdf = page_h - bottom + (rect_height - font_size) / 2
+                c.setFillColor(red)
+                c.setFont(font, font_size)
+                c.drawString(x0, y_pdf, text)
 
         c.showPage()
 
@@ -114,3 +115,14 @@ def render_text_in_rect(
     out_buf = BytesIO()
     writer.write(out_buf)
     return out_buf.getvalue()
+
+
+def render_text_in_rect(
+    original_pdf_bytes: bytes,
+    page_index: int,
+    rect: Tuple[float, float, float, float],
+    text: str,
+    font: str = "Helvetica-Bold",
+) -> bytes:
+    """Draw `text` (red) inside `rect` on the given page. Single-item convenience."""
+    return render_texts_in_rects(original_pdf_bytes, page_index, [(rect, text)], font)
